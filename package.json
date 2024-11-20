@@ -1,0 +1,17 @@
+{
+  "name": "scrape-pumpfun",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsc && node ./dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "axios": "^1.7.7",
+    "exceljs": "^4.4.0",
+    "typescript": "^5.6.3"
+  }
+}
