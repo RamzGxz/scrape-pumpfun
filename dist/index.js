@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const axios_1 = require("axios");
 const ExcelJS = require("exceljs");
 const fs = require("fs");
-let data = [];
+const date = require("date-fns");
 let filteredData = [];
 const path = './output/result.xlsx';
 const exportToExcel = (data) => __awaiter(void 0, void 0, void 0, function* () {
@@ -44,32 +44,45 @@ const exportToExcel = (data) => __awaiter(void 0, void 0, void 0, function* () {
         console.error('failed to export file:', error);
     }
 });
-const getDataByMarketCap = (limit, includeNsfw) => __awaiter(void 0, void 0, void 0, function* () {
-    if (limit <= 0) {
-        console.error('Limit harus lebih dari 0');
-        return;
+const fetchAllDataWithOffset = (limit, includeNsfw) => __awaiter(void 0, void 0, void 0, function* () {
+    let offset = 0;
+    let hasMoreData = true;
+    console.log('Fetching all data...');
+    while (hasMoreData) {
+        try {
+            console.log(`Fetching data with offset ${offset}...`);
+            const resp = yield axios_1.default.get(`https://frontend-api.pump.fun/coins?offset=${offset}&limit=${limit}&sort=market_cap&order=ASC&includeNsfw=${includeNsfw}`);
+            const data = resp.data;
+            if (data.length === 0) {
+                hasMoreData = false;
+            }
+            else {
+                const validData = data
+                    .filter((item) => item.complete && item.website && item.twitter && item.telegram)
+                    .map((item) => ({
+                    mint: item.mint,
+                    name: item.name,
+                    symbol: item.symbol,
+                    market_cap: item.usd_market_cap,
+                    created_timestamp: date.formatDistanceToNow(item.created_timestamp),
+                    twitter: item.twitter,
+                    telegram: item.telegram,
+                    website: item.website,
+                }));
+                filteredData = filteredData.concat(validData);
+                offset += limit;
+            }
+        }
+        catch (error) {
+            console.error('Error fetching data:', error);
+            hasMoreData = false;
+        }
     }
-    console.log('Please wait.....');
-    try {
-        const resp = yield (0, axios_1.default)(`https://frontend-api.pump.fun/coins?offset=1000&limit=${limit}&sort=market_cap&order=ASC&includeNsfw=${includeNsfw}`);
-        data = resp.data;
-        console.log(`${limit} data has been retrieved. Filtering...`);
-        filteredData = data
-            .filter((item) => item.complete && item.website && item.twitter && item.telegram)
-            .map((item) => ({
-            mint: item.mint,
-            name: item.name,
-            symbol: item.symbol,
-            market_cap: item.market_cap,
-            created_timestamp: new Date(item.created_timestamp).toLocaleDateString(),
-            twitter: item.twitter,
-            telegram: item.telegram,
-            website: item.website,
-        }));
-        yield exportToExcel(filteredData);
-    }
-    catch (error) {
-        console.error('Error fetching data:', error);
-    }
+    console.log(`Fetched total ${filteredData.length} items.`);
+    return filteredData;
 });
-getDataByMarketCap(5000, true);
+const getDataByMarketCap = (limit, includeNsfw) => __awaiter(void 0, void 0, void 0, function* () {
+    const allData = yield fetchAllDataWithOffset(limit, includeNsfw);
+    yield exportToExcel(allData);
+});
+getDataByMarketCap(50, true);

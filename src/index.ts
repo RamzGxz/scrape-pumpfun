@@ -2,8 +2,8 @@ import { DataType, FilteredDataType } from './types/dataTypes';
 import axios from 'axios';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
+import * as date from 'date-fns'
 
-let data: DataType[] = [];
 let filteredData: FilteredDataType[] = [];
 const path = './output/result.xlsx';
 
@@ -39,40 +39,56 @@ const exportToExcel = async (data: FilteredDataType[]) => {
   }
 };
 
-const getDataByMarketCap = async (limit: number, includeNsfw: boolean) => {
-  if (limit <= 0) {
-    console.error('Limit harus lebih dari 0');
-    return;
+const fetchAllDataWithOffset = async (limit: number, includeNsfw: boolean) => {
+  let offset = 0
+  let hasMoreData = true
+
+  console.log('Fetching all data...')
+  while (hasMoreData) {
+    try {
+      console.log(`Fetching data with offset ${offset}...`);
+      const resp = await axios.get(
+        `https://frontend-api.pump.fun/coins?offset=${offset}&limit=${limit}&sort=market_cap&order=ASC&includeNsfw=${includeNsfw}`
+      );
+
+      const data: DataType[] = resp.data;
+
+      if (data.length === 0) {
+        hasMoreData = false;
+      } else {
+
+        const validData = data
+          .filter(
+            (item) =>
+              item.complete && item.website && item.twitter && item.telegram
+          )
+          .map((item) => ({
+            mint: item.mint!,
+            name: item.name!,
+            symbol: item.symbol!,
+            market_cap: item.usd_market_cap!,
+            created_timestamp: date.formatDistanceToNow(item.created_timestamp),
+            twitter: item.twitter!,
+            telegram: item.telegram!,
+            website: item.website!,
+          }));
+
+        filteredData = filteredData.concat(validData)
+        offset += limit
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error)
+      hasMoreData = false
+    }
   }
 
-  console.log('Please wait.....');
-  try {
-    const resp = await axios(
-      `https://frontend-api.pump.fun/coins?offset=0&limit=${limit}&sort=market_cap&order=ASC&includeNsfw=${includeNsfw}`
-    );
-    data = resp.data;
-    console.log(`${limit} data has been retrieved. Filtering...`);
-
-    filteredData = data
-      .filter(
-        (item) =>
-          item.complete && item.website && item.twitter && item.telegram
-      )
-      .map((item) => ({
-        mint: item.mint!,
-        name: item.name!,
-        symbol: item.symbol!,
-        market_cap: item.market_cap!,
-        created_timestamp: new Date(item.created_timestamp!).toLocaleDateString(),
-        twitter: item.twitter!,
-        telegram: item.telegram!,
-        website: item.website!,
-      }));
-
-    await exportToExcel(filteredData);
-  } catch (error) {
-    console.error('Error fetching data:', error);
-  }
+  console.log(`Fetched total ${filteredData.length} items.`)
+  return filteredData
 };
 
-getDataByMarketCap(5000, true);
+const getDataByMarketCap = async (limit: number, includeNsfw: boolean) => {
+  const allData = await fetchAllDataWithOffset(limit, includeNsfw)
+  await exportToExcel(allData)
+}
+
+getDataByMarketCap(50, true)
